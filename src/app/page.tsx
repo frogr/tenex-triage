@@ -1,4 +1,11 @@
-export default function Home() {
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { SignInButton } from "./sign-in-button";
+
+export default async function Home() {
+  const session = await auth();
+  if (session) redirect("/dashboard");
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#0A0A0A] px-6">
       <main className="flex max-w-2xl flex-col items-center gap-8 text-center">
@@ -11,9 +18,7 @@ export default function Home() {
           200 emails. 5 seconds. Zero stress. AI-powered triage that actually
           understands what matters.
         </p>
-        <button className="rounded-full bg-white px-8 py-3 text-sm font-semibold text-black transition-colors hover:bg-zinc-200">
-          Sign in with Google
-        </button>
+        <SignInButton />
       </main>
       <footer className="absolute bottom-8 text-sm text-zinc-600">
         Built for Tenex by Austin French
