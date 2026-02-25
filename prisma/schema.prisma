@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                 String              @id @default(cuid())
+  name               String?
+  email              String?             @unique
+  emailVerified      DateTime?
+  image              String?
+  accounts           Account[]
+  sessions           Session[]
+  buckets            Bucket[]
+  threads            EmailThread[]
+  classificationRuns ClassificationRun[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Bucket {
+  id          String        @id @default(cuid())
+  name        String
+  description String
+  sortOrder   Int           @default(0)
+  isDefault   Boolean       @default(false)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threads     EmailThread[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([userId, name])
+}
+
+model EmailThread {
+  id           String    @id // Gmail thread ID
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bucketId     String?
+  bucket       Bucket?   @relation(fields: [bucketId], references: [id], onDelete: SetNull)
+  subject      String
+  snippet      String
+  sender       String
+  senderEmail  String
+  date         DateTime
+  gmailLabels  String[]
+  messageCount Int       @default(1)
+  isRead       Boolean   @default(true)
+  confidence   Float?
+  classifiedAt DateTime?
+  userOverride Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId, bucketId])
+  @@index([userId, date(sort: Desc)])
+}
+
+model ClassificationRun {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status          String // "pending" | "running" | "completed" | "failed"
+  totalThreads    Int
+  classifiedCount Int       @default(0)
+  bucketSnapshot  Json
+  modelUsed       String
+  inputTokens     Int?
+  outputTokens    Int?
+  costCents       Float?
+  errorMessage    String?
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([userId, startedAt(sort: Desc)])
+}
