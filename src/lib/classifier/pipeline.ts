@@ -7,15 +7,15 @@ import type { ClassificationInput, BucketDefinition } from "./types";
 const INPUT_COST_PER_M = 0.15;
 const OUTPUT_COST_PER_M = 0.60;
 
-/**
- * Run the full classification pipeline for a user.
- * Fetches threads, batches them, classifies via LLM, and persists results.
- */
+type ProgressCallback = (step: string, data: Record<string, unknown>) => void;
+
 export async function runClassificationPipeline(
   userId: string,
-  onProgress?: (classified: number, total: number) => void
+  onProgress?: ProgressCallback,
+  reclassifyAll = false
 ): Promise<string> {
-  // Get user's buckets
+  const emit = onProgress ?? (() => {});
+
   const buckets = await prisma.bucket.findMany({
     where: { userId },
     orderBy: { sortOrder: "asc" },
@@ -29,21 +29,38 @@ export async function runClassificationPipeline(
     name: b.name,
     description: b.description,
   }));
-
-  // Build a name → id map for assignment
   const bucketNameToId = new Map(buckets.map((b) => [b.name, b.id]));
 
-  // Get threads that haven't been manually overridden
-  const threads = await prisma.emailThread.findMany({
-    where: { userId, userOverride: false },
+  const allThreads = await prisma.emailThread.findMany({
+    where: { userId },
     orderBy: { date: "desc" },
   });
 
+  const manualCount = allThreads.filter((t) => t.userOverride).length;
+  const alreadyClassified = allThreads.filter(
+    (t) => t.bucketId && !t.userOverride
+  ).length;
+
+  // Only classify threads that need it (unless reclassifyAll)
+  const threads = reclassifyAll
+    ? allThreads.filter((t) => !t.userOverride)
+    : allThreads.filter((t) => !t.userOverride && !t.bucketId);
+
+  emit("scanning", {
+    total: allThreads.length,
+    manual: manualCount,
+    alreadyClassified,
+    toClassify: threads.length,
+  });
+
   if (threads.length === 0) {
-    throw new Error("No threads to classify — sync from Gmail first");
+    emit("complete", {
+      classifiedCount: 0,
+      message: "Everything is already classified!",
+    });
+    return "";
   }
 
-  // Create the classification run record
   const run = await prisma.classificationRun.create({
     data: {
       userId,
@@ -54,22 +71,23 @@ export async function runClassificationPipeline(
     },
   });
 
+  const inputs: ClassificationInput[] = threads.map((t) => ({
+    threadId: t.id,
+    sender: t.sender,
+    subject: t.subject,
+    snippet: t.snippet,
+    date: t.date.toISOString(),
+  }));
+
+  const batches = createBatches(inputs);
+
+  emit("classifying", { threadCount: threads.length });
+
   try {
-    // Format threads for the LLM
-    const inputs: ClassificationInput[] = threads.map((t) => ({
-      threadId: t.id,
-      sender: t.sender,
-      subject: t.subject,
-      snippet: t.snippet,
-      date: t.date.toISOString(),
-    }));
-
-    const batches = createBatches(inputs);
-
     let totalInput = 0;
     let totalOutput = 0;
+    let classifiedSoFar = 0;
 
-    // Run all batches
     const { results, failures } = await runBatchesInParallel(
       batches,
       async (batch) => {
@@ -79,15 +97,19 @@ export async function runClassificationPipeline(
         totalOutput += outputTokens;
         return results;
       },
-      onProgress
+      (_completed, _total) => {
+        classifiedSoFar = Math.min(classifiedSoFar + 25, threads.length);
+        emit("progress", {
+          classified: classifiedSoFar,
+          total: threads.length,
+        });
+      }
     );
 
-    // Persist classifications to threads
     let classifiedCount = 0;
     for (const result of results) {
       const bucketId = bucketNameToId.get(result.bucket);
       if (!bucketId) continue;
-
       await prisma.emailThread.update({
         where: { id: result.threadId },
         data: {
@@ -99,16 +121,14 @@ export async function runClassificationPipeline(
       classifiedCount++;
     }
 
-    // Calculate cost
     const costCents =
       (totalInput / 1_000_000) * INPUT_COST_PER_M * 100 +
       (totalOutput / 1_000_000) * OUTPUT_COST_PER_M * 100;
 
-    // Update the run record
     await prisma.classificationRun.update({
       where: { id: run.id },
       data: {
-        status: failures > 0 ? "completed" : "completed",
+        status: "completed",
         classifiedCount,
         inputTokens: totalInput,
         outputTokens: totalOutput,
@@ -117,6 +137,11 @@ export async function runClassificationPipeline(
         errorMessage:
           failures > 0 ? `${failures} batch(es) failed after retry` : null,
       },
+    });
+
+    emit("complete", {
+      classifiedCount,
+      costCents: Math.round(costCents * 100) / 100,
     });
 
     return run.id;
