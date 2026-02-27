@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { seedDefaultBuckets } from "@/lib/buckets";
 import { SignOutButton } from "./sign-out-button";
-import { ThreadList } from "./thread-list";
+import { Dashboard } from "./dashboard";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -20,7 +20,7 @@ export default async function DashboardPage() {
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-6 py-8">
-        <ThreadList />
+        <Dashboard />
       </main>
     </div>
   );
