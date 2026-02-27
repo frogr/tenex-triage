@@ -44,6 +44,7 @@ model User {
   buckets            Bucket[]
   threads            EmailThread[]
   classificationRuns ClassificationRun[]
+  syncEvents         SyncEvent[]
 }
 
 model VerificationToken {
@@ -110,4 +111,18 @@ model ClassificationRun {
   completedAt     DateTime?
 
   @@index([userId, startedAt(sort: Desc)])
+}
+
+model SyncEvent {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threadsFound  Int
+  newThreads    Int      @default(0)
+  updatedThreads Int     @default(0)
+  durationMs    Int?
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
 }

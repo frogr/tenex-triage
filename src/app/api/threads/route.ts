@@ -21,13 +21,27 @@ export async function GET(request: NextRequest) {
     let synced: number | null = null;
 
     if (shouldSync) {
+      const syncStart = Date.now();
       const gmail = await getGmailClient(userId);
       const threadIds = await fetchThreadIds(gmail, 200);
+
+      let newThreads = 0;
+      let updatedThreads = 0;
 
       if (threadIds.length > 0) {
         const threads = await fetchThreadDetails(gmail, threadIds);
         synced = 0;
+
+        // Get existing thread IDs for this user
+        const existingIds = new Set(
+          (await prisma.emailThread.findMany({
+            where: { userId },
+            select: { id: true },
+          })).map((t) => t.id)
+        );
+
         for (const thread of threads) {
+          const isNew = !existingIds.has(thread.id);
           await prisma.emailThread.upsert({
             where: { id: thread.id },
             create: {
@@ -53,9 +67,21 @@ export async function GET(request: NextRequest) {
               isRead: thread.isRead,
             },
           });
+          if (isNew) newThreads++;
+          else updatedThreads++;
           synced++;
         }
       }
+
+      await prisma.syncEvent.create({
+        data: {
+          userId,
+          threadsFound: threadIds.length,
+          newThreads,
+          updatedThreads,
+          durationMs: Date.now() - syncStart,
+        },
+      });
     }
 
     const dbThreads = await prisma.emailThread.findMany({

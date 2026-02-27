@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { BucketTabs } from "./bucket-tabs";
 import { ThreadCard } from "./thread-card";
 import { CreateBucketDialog } from "./create-bucket-dialog";
@@ -240,13 +240,12 @@ export function Dashboard() {
           {syncing ? "Syncing..." : "Refresh from Gmail"}
         </button>
         {hasThreads && (
-          <button
-            onClick={() => handleClassify()}
+          <ClassifyButton
+            classifying={classifying}
             disabled={isBusy}
-            className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
-          >
-            {classifying ? "Classifying..." : "Classify Inbox"}
-          </button>
+            onClassify={() => handleClassify()}
+            onReclassifyAll={() => handleClassify(true)}
+          />
         )}
         <button
           onClick={() => setShowCreateBucket(true)}
@@ -332,6 +331,86 @@ export function Dashboard() {
           onClose={() => setShowCreateBucket(false)}
           onCreate={handleCreateBucket}
         />
+      )}
+    </div>
+  );
+}
+
+function ClassifyButton({
+  classifying,
+  disabled,
+  onClassify,
+  onReclassifyAll,
+}: {
+  classifying: boolean;
+  disabled: boolean;
+  onClassify: () => void;
+  onReclassifyAll: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative flex" ref={ref}>
+      <button
+        onClick={onClassify}
+        disabled={disabled}
+        className="rounded-l-lg bg-white px-3 py-2 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+      >
+        {classifying ? "Classifying..." : "Classify Inbox"}
+      </button>
+      <button
+        onClick={() => setOpen(!open)}
+        disabled={disabled}
+        className="rounded-r-lg border-l border-zinc-300 bg-white px-1.5 py-2 text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label="Classification options"
+        aria-expanded={open}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-1 min-w-[200px] rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl">
+          <button
+            onClick={() => {
+              setOpen(false);
+              onClassify();
+            }}
+            className="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-zinc-800"
+          >
+            <span className="text-sm text-zinc-200">Classify new</span>
+            <span className="text-xs text-zinc-500">Only unclassified threads</span>
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              onReclassifyAll();
+            }}
+            className="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-zinc-800"
+          >
+            <span className="text-sm text-zinc-200">Reclassify all</span>
+            <span className="text-xs text-zinc-500">Re-sort everything (keeps manual moves)</span>
+          </button>
+        </div>
       )}
     </div>
   );

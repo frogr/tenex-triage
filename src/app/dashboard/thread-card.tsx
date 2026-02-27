@@ -90,13 +90,8 @@ export function ThreadCard({ thread, buckets, onMove }: ThreadCardProps) {
               ({thread.messageCount})
             </span>
           )}
-          {thread.confidence !== null && thread.confidence < 0.7 && (
-            <span
-              className="shrink-0 rounded-full bg-yellow-900/30 px-1.5 py-0.5 text-xs text-yellow-600"
-              title={`Low confidence: ${Math.round(thread.confidence * 100)}%`}
-            >
-              ?
-            </span>
+          {thread.confidence !== null && (
+            <ConfidenceBadge confidence={thread.confidence} />
           )}
           <span className="ml-auto shrink-0 text-xs tabular-nums text-zinc-600">
             {relativeDate(thread.date)}
@@ -163,5 +158,36 @@ export function ThreadCard({ thread, buckets, onMove }: ThreadCardProps) {
         )}
       </div>
     </div>
+  );
+}
+
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const pct = Math.round(confidence * 100);
+
+  if (confidence >= 0.85) {
+    // High confidence — no badge, keep it clean
+    return null;
+  }
+
+  if (confidence >= 0.7) {
+    // Medium confidence — subtle indicator
+    return (
+      <span
+        className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[11px] tabular-nums text-zinc-500"
+        title={`Confidence: ${pct}%`}
+      >
+        {pct}%
+      </span>
+    );
+  }
+
+  // Low confidence — warning
+  return (
+    <span
+      className="shrink-0 rounded-full bg-yellow-900/30 px-1.5 py-0.5 text-[11px] tabular-nums text-yellow-500"
+      title={`Low confidence: ${pct}%`}
+    >
+      {pct}%
+    </span>
   );
 }
