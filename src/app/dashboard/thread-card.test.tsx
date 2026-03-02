@@ -61,7 +61,7 @@ describe("ThreadCard", () => {
     expect(screen.getByText("Needs Action")).toBeInTheDocument();
   });
 
-  it("shows low confidence indicator", () => {
+  it("shows low confidence indicator with percentage", () => {
     render(
       <ThreadCard
         thread={makeThread({ confidence: 0.5 })}
@@ -69,7 +69,18 @@ describe("ThreadCard", () => {
         onMove={() => {}}
       />
     );
-    expect(screen.getByText("?")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+  });
+
+  it("shows medium confidence indicator", () => {
+    render(
+      <ThreadCard
+        thread={makeThread({ confidence: 0.75 })}
+        buckets={BUCKETS}
+        onMove={() => {}}
+      />
+    );
+    expect(screen.getByText("75%")).toBeInTheDocument();
   });
 
   it("hides confidence indicator when confidence is high", () => {
@@ -80,7 +91,7 @@ describe("ThreadCard", () => {
         onMove={() => {}}
       />
     );
-    expect(screen.queryByText("?")).not.toBeInTheDocument();
+    expect(screen.queryByText("90%")).not.toBeInTheDocument();
   });
 
   it("applies bold styling for unread threads", () => {

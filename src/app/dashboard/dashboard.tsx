@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { BucketTabs } from "./bucket-tabs";
 import { ThreadCard } from "./thread-card";
 import { CreateBucketDialog } from "./create-bucket-dialog";
+import { EditBucketDialog } from "./edit-bucket-dialog";
 import { ClassificationLog, type LogEntry } from "./classification-log";
 
 interface Bucket {
   id: string;
   name: string;
   description: string;
+  isDefault: boolean;
   _count: { threads: number };
 }
 
@@ -37,6 +39,9 @@ export function Dashboard() {
   const [showCreateBucket, setShowCreateBucket] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMoving, setBulkMoving] = useState(false);
+  const [editingBucket, setEditingBucket] = useState<Bucket | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -168,7 +173,57 @@ export function Dashboard() {
     }
   }
 
-  async function handleCreateBucket(name: string, description: string) {
+  function handleToggleSelect(threadId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(threadId)) next.delete(threadId);
+      else next.add(threadId);
+      return next;
+    });
+  }
+
+  function handleSelectAll() {
+    if (selectedIds.size === filteredThreads.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredThreads.map((t) => t.id)));
+    }
+  }
+
+  async function handleBulkMove(bucketId: string) {
+    if (selectedIds.size === 0) return;
+    setBulkMoving(true);
+    setError(null);
+    const ids = Array.from(selectedIds);
+
+    // Optimistic update
+    const targetBucket = buckets.find((b) => b.id === bucketId);
+    setThreads((prev) =>
+      prev.map((t) =>
+        ids.includes(t.id)
+          ? { ...t, bucketId, bucket: targetBucket ? { id: bucketId, name: targetBucket.name } : t.bucket }
+          : t
+      )
+    );
+    setSelectedIds(new Set());
+
+    try {
+      const res = await fetch("/api/threads/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadIds: ids, bucketId }),
+      });
+      if (!res.ok) throw new Error("Bulk move failed");
+      await loadData();
+    } catch {
+      setError("Failed to move threads");
+      await loadData();
+    } finally {
+      setBulkMoving(false);
+    }
+  }
+
+  async function handleCreateBucket(name: string, description: string, reclassifyAll: boolean) {
     try {
       const res = await fetch("/api/buckets", {
         method: "POST",
@@ -181,9 +236,36 @@ export function Dashboard() {
       }
       setShowCreateBucket(false);
       await loadData();
-      await handleClassify();
+      await handleClassify(reclassifyAll);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create bucket");
+    }
+  }
+
+  async function handleSaveBucket(id: string, name: string, description: string) {
+    try {
+      const res = await fetch(`/api/buckets/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description }),
+      });
+      if (!res.ok) throw new Error("Failed to update bucket");
+      setEditingBucket(null);
+      await loadData();
+    } catch {
+      setError("Failed to update bucket");
+    }
+  }
+
+  async function handleDeleteBucket(id: string) {
+    try {
+      const res = await fetch(`/api/buckets/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete bucket");
+      setEditingBucket(null);
+      if (activeBucket === id) setActiveBucket(null);
+      await loadData();
+    } catch {
+      setError("Failed to delete bucket");
     }
   }
 
@@ -195,7 +277,9 @@ export function Dashboard() {
   const hasThreads = threads.length > 0;
   const needsClassification =
     hasThreads && unclassifiedCount > threads.length * 0.5;
-  const isBusy = syncing || classifying;
+  const selectable = selectedIds.size > 0;
+  const allSelected = selectable && selectedIds.size === filteredThreads.length;
+  const isBusy = syncing || classifying || bulkMoving;
 
   if (loading) {
     return (
@@ -240,13 +324,12 @@ export function Dashboard() {
           {syncing ? "Syncing..." : "Refresh from Gmail"}
         </button>
         {hasThreads && (
-          <button
-            onClick={() => handleClassify()}
+          <ClassifyButton
+            classifying={classifying}
             disabled={isBusy}
-            className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
-          >
-            {classifying ? "Classifying..." : "Classify Inbox"}
-          </button>
+            onClassify={() => handleClassify()}
+            onReclassifyAll={() => handleClassify(true)}
+          />
         )}
         <button
           onClick={() => setShowCreateBucket(true)}
@@ -297,10 +380,28 @@ export function Dashboard() {
           <BucketTabs
             buckets={buckets}
             activeBucket={activeBucket}
-            onSelect={setActiveBucket}
+            onSelect={(id) => { setActiveBucket(id); setSelectedIds(new Set()); }}
             onCreateBucket={() => setShowCreateBucket(true)}
+            onEditBucket={(id) => {
+              const b = buckets.find((b) => b.id === id);
+              if (b) setEditingBucket(b);
+            }}
             totalThreads={threads.length}
+            onDropThread={handleMoveThread}
           />
+
+          {/* Bulk action bar */}
+          {selectedIds.size > 0 && (
+            <BulkActionBar
+              count={selectedIds.size}
+              allSelected={allSelected}
+              buckets={buckets}
+              onSelectAll={handleSelectAll}
+              onClear={() => setSelectedIds(new Set())}
+              onMove={handleBulkMove}
+              moving={bulkMoving}
+            />
+          )}
 
           {filteredThreads.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-16">
@@ -320,6 +421,9 @@ export function Dashboard() {
                   thread={thread}
                   buckets={buckets}
                   onMove={handleMoveThread}
+                  selectable={selectedIds.size > 0}
+                  selected={selectedIds.has(thread.id)}
+                  onToggleSelect={handleToggleSelect}
                 />
               ))}
             </div>
@@ -332,6 +436,184 @@ export function Dashboard() {
           onClose={() => setShowCreateBucket(false)}
           onCreate={handleCreateBucket}
         />
+      )}
+
+      {editingBucket && (
+        <EditBucketDialog
+          bucket={editingBucket}
+          onClose={() => setEditingBucket(null)}
+          onSave={handleSaveBucket}
+          onDelete={handleDeleteBucket}
+        />
+      )}
+    </div>
+  );
+}
+
+function BulkActionBar({
+  count,
+  allSelected,
+  buckets,
+  onSelectAll,
+  onClear,
+  onMove,
+  moving,
+}: {
+  count: number;
+  allSelected: boolean;
+  buckets: Bucket[];
+  onSelectAll: () => void;
+  onClear: () => void;
+  onMove: (bucketId: string) => void;
+  moving: boolean;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowMenu(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [showMenu]);
+
+  return (
+    <div className="mt-2 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 sm:gap-3 sm:px-4">
+      <span className="text-sm tabular-nums text-zinc-300">
+        {count} selected
+      </span>
+      <button
+        onClick={onSelectAll}
+        className="text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+      >
+        {allSelected ? "Deselect all" : "Select all"}
+      </button>
+      <div className="ml-auto flex items-center gap-2" ref={ref}>
+        <div className="relative">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            disabled={moving}
+            className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
+          >
+            {moving ? "Moving..." : "Move to..."}
+          </button>
+          {showMenu && (
+            <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl">
+              {buckets.map((bucket) => (
+                <button
+                  key={bucket.id}
+                  onClick={() => {
+                    setShowMenu(false);
+                    onMove(bucket.id);
+                  }}
+                  className="block w-full px-3 py-2 text-left text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                >
+                  {bucket.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={onClear}
+          className="rounded p-1 text-zinc-600 transition-colors hover:text-zinc-300"
+          aria-label="Clear selection"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ClassifyButton({
+  classifying,
+  disabled,
+  onClassify,
+  onReclassifyAll,
+}: {
+  classifying: boolean;
+  disabled: boolean;
+  onClassify: () => void;
+  onReclassifyAll: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative flex" ref={ref}>
+      <button
+        onClick={onClassify}
+        disabled={disabled}
+        className="rounded-l-lg bg-white px-3 py-2 text-sm font-medium text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+      >
+        {classifying ? "Classifying..." : "Classify Inbox"}
+      </button>
+      <button
+        onClick={() => setOpen(!open)}
+        disabled={disabled}
+        className="rounded-r-lg border-l border-zinc-300 bg-white px-1.5 py-2 text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label="Classification options"
+        aria-expanded={open}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-1 min-w-[200px] rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl">
+          <button
+            onClick={() => {
+              setOpen(false);
+              onClassify();
+            }}
+            className="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-zinc-800"
+          >
+            <span className="text-sm text-zinc-200">Classify new</span>
+            <span className="text-xs text-zinc-500">Only unclassified threads</span>
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              onReclassifyAll();
+            }}
+            className="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-zinc-800"
+          >
+            <span className="text-sm text-zinc-200">Reclassify all</span>
+            <span className="text-xs text-zinc-500">Re-sort everything (keeps manual moves)</span>
+          </button>
+        </div>
       )}
     </div>
   );
