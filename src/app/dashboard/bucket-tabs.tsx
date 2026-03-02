@@ -13,7 +13,9 @@ interface BucketTabsProps {
   activeBucket: string | null;
   onSelect: (bucketId: string | null) => void;
   onCreateBucket?: () => void;
+  onEditBucket?: (bucketId: string) => void;
   totalThreads: number;
+  onDropThread?: (threadId: string, bucketId: string) => void;
 }
 
 export function BucketTabs({
@@ -21,7 +23,9 @@ export function BucketTabs({
   activeBucket,
   onSelect,
   onCreateBucket,
+  onEditBucket,
   totalThreads,
+  onDropThread,
 }: BucketTabsProps) {
   const activeName = activeBucket
     ? buckets.find((b) => b.id === activeBucket)?.name ?? "Bucket"
@@ -42,6 +46,7 @@ export function BucketTabs({
           totalThreads={totalThreads}
           onSelect={onSelect}
           onCreateBucket={onCreateBucket}
+          onEditBucket={onEditBucket}
         />
       </div>
 
@@ -65,6 +70,8 @@ export function BucketTabs({
               onClick={() => onSelect(bucket.id)}
               label={bucket.name}
               count={bucket._count.threads}
+              onDropThread={onDropThread ? (threadId) => onDropThread(threadId, bucket.id) : undefined}
+              onEdit={onEditBucket ? () => onEditBucket(bucket.id) : undefined}
             />
           ))}
         </nav>
@@ -81,6 +88,7 @@ function MobileSelector({
   totalThreads,
   onSelect,
   onCreateBucket,
+  onEditBucket,
 }: {
   buckets: Bucket[];
   activeBucket: string | null;
@@ -89,6 +97,7 @@ function MobileSelector({
   totalThreads: number;
   onSelect: (bucketId: string | null) => void;
   onCreateBucket?: () => void;
+  onEditBucket?: (bucketId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -153,16 +162,33 @@ function MobileSelector({
             }}
           />
           {buckets.map((bucket) => (
-            <SelectorOption
-              key={bucket.id}
-              label={bucket.name}
-              count={bucket._count.threads}
-              active={activeBucket === bucket.id}
-              onClick={() => {
-                onSelect(bucket.id);
-                setOpen(false);
-              }}
-            />
+            <div key={bucket.id} className="flex items-center">
+              <SelectorOption
+                label={bucket.name}
+                count={bucket._count.threads}
+                active={activeBucket === bucket.id}
+                onClick={() => {
+                  onSelect(bucket.id);
+                  setOpen(false);
+                }}
+              />
+              {onEditBucket && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(false);
+                    onEditBucket(bucket.id);
+                  }}
+                  className="shrink-0 rounded p-2 text-zinc-700 transition-colors active:bg-zinc-800 active:text-zinc-300"
+                  aria-label={`Edit ${bucket.name}`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+              )}
+            </div>
           ))}
           {onCreateBucket && (
             <>
@@ -227,29 +253,66 @@ function TabButton({
   onClick,
   label,
   count,
+  onDropThread,
+  onEdit,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
   count: number;
+  onDropThread?: (threadId: string) => void;
+  onEdit?: () => void;
 }) {
+  const [dragOver, setDragOver] = useState(false);
+
   return (
-    <button
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={`shrink-0 border-b-2 px-4 py-2.5 text-sm transition-colors ${
-        active
-          ? "border-white text-white"
-          : "border-transparent text-zinc-500 hover:text-zinc-300"
-      }`}
+    <div
+      className="group/tab flex shrink-0 items-center"
+      onDragOver={(e) => {
+        if (!onDropThread) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const threadId = e.dataTransfer.getData("text/plain");
+        if (threadId && onDropThread) onDropThread(threadId);
+      }}
     >
-      {label}
-      <span
-        className={`ml-1.5 tabular-nums ${active ? "text-zinc-400" : "text-zinc-600"}`}
+      <button
+        role="tab"
+        aria-selected={active}
+        onClick={onClick}
+        className={`border-b-2 px-4 py-2.5 text-sm transition-colors ${
+          dragOver
+            ? "border-blue-400 bg-blue-950/30 text-blue-300"
+            : active
+              ? "border-white text-white"
+              : "border-transparent text-zinc-500 hover:text-zinc-300"
+        }`}
       >
-        {count}
-      </span>
-    </button>
+        {label}
+        <span
+          className={`ml-1.5 tabular-nums ${dragOver ? "text-blue-400" : active ? "text-zinc-400" : "text-zinc-600"}`}
+        >
+          {count}
+        </span>
+      </button>
+      {active && onEdit && (
+        <button
+          onClick={onEdit}
+          className="-ml-2 rounded p-1 text-zinc-600 opacity-0 transition-all hover:text-zinc-300 group-hover/tab:opacity-100"
+          aria-label={`Edit ${label}`}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
