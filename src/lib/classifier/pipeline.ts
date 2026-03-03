@@ -97,7 +97,7 @@ export async function runClassificationPipeline(
         totalOutput += outputTokens;
         return results;
       },
-      (_completed, _total) => {
+      () => {
         classifiedSoFar = Math.min(classifiedSoFar + 25, threads.length);
         emit("progress", {
           classified: classifiedSoFar,

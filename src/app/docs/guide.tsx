@@ -565,6 +565,7 @@ export default function TenexTriageGuide() {
           "'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
+      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link
         href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
         rel="stylesheet"
@@ -811,7 +812,7 @@ export default function TenexTriageGuide() {
               How Classification Works
             </h2>
             <p style={{ color: COLORS.textMuted, fontSize: 14, marginBottom: 24 }}>
-              The classification pipeline is the core of Triage — here's the full flow from button click to sorted inbox.
+              The classification pipeline is the core of Triage — here&apos;s the full flow from button click to sorted inbox.
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>

@@ -1,4 +1,4 @@
-    # Tenex Triage
+# Tenex Triage
 
 AI-powered email triage. Connects to Gmail, classifies your latest threads into smart buckets using GPT-4o-mini, and lets you organize with drag-and-drop, bulk actions, and AI-suggested categories.
 
