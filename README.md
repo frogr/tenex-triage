@@ -1,4 +1,4 @@
-# Tenex Triage
+    # Tenex Triage
 
 AI-powered email triage. Connects to Gmail, classifies your latest threads into smart buckets using GPT-4o-mini, and lets you organize with drag-and-drop, bulk actions, and AI-suggested categories.
 
@@ -29,13 +29,13 @@ npm run dev
 
 Copy `.env.example` and fill in:
 
-| Variable | Where to get it |
-|---|---|
-| `DATABASE_URL` | [Neon](https://neon.tech) — create a free Postgres database |
-| `GOOGLE_CLIENT_ID` | [Google Cloud Console](https://console.cloud.google.com) — OAuth 2.0 credentials |
-| `GOOGLE_CLIENT_SECRET` | Same as above |
-| `NEXTAUTH_SECRET` | Run `openssl rand -base64 32` |
-| `OPENAI_API_KEY` | [OpenAI Platform](https://platform.openai.com/api-keys) |
+| Variable               | Where to get it                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `DATABASE_URL`         | [Neon](https://neon.tech) — create a free Postgres database                      |
+| `GOOGLE_CLIENT_ID`     | [Google Cloud Console](https://console.cloud.google.com) — OAuth 2.0 credentials |
+| `GOOGLE_CLIENT_SECRET` | Same as above                                                                    |
+| `NEXTAUTH_SECRET`      | Run `openssl rand -base64 32`                                                    |
+| `OPENAI_API_KEY`       | [OpenAI Platform](https://platform.openai.com/api-keys)                          |
 
 ### Google OAuth Setup
 
@@ -49,15 +49,15 @@ Copy `.env.example` and fill in:
 
 ## Scripts
 
-| Command | What it does |
-|---|---|
-| `npm run dev` | Start dev server |
-| `npm run build` | Prisma generate + production build |
-| `npm test` | Run all 52 tests |
-| `npm run test:watch` | Tests in watch mode |
-| `npm run lint` | ESLint |
-| `npx prisma studio` | Database GUI |
-| `npx prisma db push` | Push schema changes to database |
+| Command              | What it does                       |
+| -------------------- | ---------------------------------- |
+| `npm run dev`        | Start dev server                   |
+| `npm run build`      | Prisma generate + production build |
+| `npm test`           | Run all 52 tests                   |
+| `npm run test:watch` | Tests in watch mode                |
+| `npm run lint`       | ESLint                             |
+| `npx prisma studio`  | Database GUI                       |
+| `npx prisma db push` | Push schema changes to database    |
 
 ## Stack
 
